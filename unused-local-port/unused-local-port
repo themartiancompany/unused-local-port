@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+#
+# SPDX-License-Identifier: AGPL-3.0
+
+_bin="$( \
+  dirname \
+    "$( \
+      command \
+        -v \
+	  "env")")"
+_lib="${_bin}/../lib"
+_share="${_bin}/../share"
+source \
+  "${_lib}/libcrash-bash/crash-bash"
+
+_requirements() {
+  _check_cmd \
+    "netstat"
+}
+
+_netstat() {
+  local \
+    _out
+  _out="$( \
+    netstat \
+      -atun \
+      2&>/dev/null)"
+  echo \
+    "${_out}"
+}
+
+# shellcheck disable=SC2034
+_global_variables() {
+  discovery_date=""
+  port_lower=""
+  port_upper=""
+  color=""
+  quiet=""
+}
+
+_unused_local_port() {
+  local \
+    _lower="${1}" \
+    _upper="${2}" \
+    _shuf_opts=() \
+    _port
+  _shuf_opts=(
+    -n
+      1
+    -i
+      "${_lower}-${_upper}"
+  )
+  while
+    _port="$( \
+      shuf \
+        "${_shuf_opts[@]}")"
+    _netstat | \
+      grep \
+        -q "${_port}"; do
+    continue
+  done
+  echo \
+    "${_port}"
+}
+
+_set_overrides() {
+  _set_override \
+    "discovery" \
+    "date" \
+    "$(_get_date_human)"
+  _set_override \
+    "port" \
+    "lower" \
+    "49152"
+  _set_override \
+    "port" \
+    "upper" \
+    "65535"
+  if [[ -v override_color ]]; then
+    color="${override_color}"
+  elif [[ -z "${color}" ]]; then
+    color="n"
+  fi
+  if [[ -v override_quiet ]]; then
+    quiet="${override_quiet}"
+  elif [[ -z "${quiet}" ]]; then
+    quiet="y"
+  fi
+}
+
+# Shows configuration options.
+_show_config() {
+  _msg_info "$(_get "app" "name") configuration"
+  _msg_info "           Discovery date:   $(_get "discovery" "date")"
+  _msg_info "               Lower port:   $(_get "port" "lower")"
+  _msg_info "               Upper port:   $(_get "port" "upper")"
+}
+
+
+# Show help usage, with an exit status.
+# $1: exit status number.
+_usage() {
+  local \
+    _usage_text
+  IFS='' \
+    read \
+      -r \
+      -d '' \
+      _usage_text << \
+        ENDUSAGETEXT || true
+
+Returns an unused local port
+
+Usage:
+  $(_get "app" "name")
+    [options]
+  options:
+     -l                   Lower search bound.
+			  Default: $(_get "port" "lower")
+     -u                   Upper search bound.
+			  Default: $(_get "port" "upper")
+     -h                   This message.
+     -v                   Enable verbose output
+ENDUSAGETEXT
+  _printf \
+    '%s\n' \
+    "${_usage_text}"
+  exit \
+    "${1}"
+}
+
+_globals
+_global_variables
+# shellcheck disable=SC2004
+# shellcheck disable=SC2034
+while \
+  getopts \
+    'l:u:cvh?' \
+    arg; do
+  case \
+    "${arg}" in
+    l) override_port_lower="${OPTARG}" ;;
+    u) override_port_upper="${OPTARG}" ;;
+    c) override_color="y" ;;
+    v) override_quiet="n" ;;
+    h|?) _set_overrides && \
+	 _usage \
+           0 ;;
+    *)
+    _msg_error \
+      "Invalid argument '${arg}'" \
+      0 && \
+    _set_overrides && \
+    _usage \
+      1
+    ;;
+  esac
+done
+shift \
+  $(( \
+    OPTIND - 1 \
+  ))
+_set_overrides
+_config_user_init \
+  "$(_get "app" "name")"
+_show_config
+_unused_local_port \
+  "$(_get \
+       "port" \
+       "lower")" \
+  "$(_get \
+       "port" \
+       "upper")"
+
+# vim:set sw=2 sts=-1 et:
